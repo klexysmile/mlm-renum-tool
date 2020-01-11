@@ -1,0 +1,295 @@
+package mlm.tool.mungwin.com.mlmtool.services;
+
+import mlm.tool.mungwin.com.mlmtool.entities.*;
+import mlm.tool.mungwin.com.mlmtool.exceptions.ApiException;
+import mlm.tool.mungwin.com.mlmtool.exceptions.ErrorCodes;
+import mlm.tool.mungwin.com.mlmtool.exchange.payment.PaymentRestClient;
+import mlm.tool.mungwin.com.mlmtool.exchange.payment.dto.request.DepositListing;
+import mlm.tool.mungwin.com.mlmtool.exchange.payment.dto.request.TransferRequestDTO;
+import mlm.tool.mungwin.com.mlmtool.exchange.payment.props.PaymentProps;
+import mlm.tool.mungwin.com.mlmtool.repositories.*;
+import mlm.tool.mungwin.com.mlmtool.services.contract.BonusCalculationService;
+import mlm.tool.mungwin.com.mlmtool.utils.Parameters;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.lang.reflect.Parameter;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class BonusCalculationServiceImpl implements BonusCalculationService {
+
+    //<editor-fold desc="FIELDS">
+    private Logger logger = LoggerFactory.getLogger(BonusCalculationServiceImpl.class);
+
+    @Autowired
+    PaymentRestClient paymentRestClient;
+
+    @Autowired
+    private PaymentProps paymentProps;
+
+    @Autowired
+    MessageRepository messageRepository;
+
+    @Autowired
+    SettingsRepository settingsRepository;
+
+    @Autowired
+    CustomerRepository customerRepository;
+
+    @Autowired
+    ProcessPositionRepository processPositionRepository;
+
+    @Autowired
+    CustomerAccountRepository customerAccountRepository;
+
+    @Autowired
+    AccountMovementsRepository accountMovementsRepository;
+
+    @Autowired
+    BonusRepository bonusRepository;
+
+    @Autowired
+    TransactionRepository transactionRepository;
+    //</editor-fold>
+
+    public void processMessages() {
+
+        List<Messages> messagesList = messageRepository.findMessagesByStatus(Parameters.TRANSACTION_STATUS_PENDING);
+
+        logger.info(" ==> PROCESSING -- {} -- MESSAGES <== ", messagesList.size());
+        messagesList.forEach((messages -> {
+            JSONObject messageJSON = new JSONObject(messages.getMessage());
+            switch (messageJSON.getString("type")) {
+                case Parameters.MESSAGE_TYPE_REGISTRATION:
+                    processNewRegistration(messageJSON, messages);
+                    break;
+                default:
+
+                    break;
+            }
+        }));
+
+    }
+
+
+    public boolean processNewRegistration(JSONObject message, Messages messageEntity){
+
+        //FOR NEW REGISTRATION THE FOLLOWING WILL BE DONE
+        //=> Direct referral bonus given to referrer
+        //=> Two points accorded to each customer that is not yet at the top
+        //=> Qualification bonuses calculator for each user that gets a point increment
+        JSONObject downLineJSON = message.getJSONObject("down_line");
+        JSONObject upLineJSON = message.getJSONObject("up_line");
+        JSONObject referrerJSON = message.getJSONObject("referrer");
+
+        //Add two points to down-line customer
+        Optional<Customer> downCustomerOptional = customerRepository.findById(downLineJSON.getLong("customer_id"));
+        if(!downCustomerOptional.isPresent()){
+            throw new ApiException("No down-line customer", HttpStatus.FAILED_DEPENDENCY, ErrorCodes.CUSTOMER_NOT_FOUND.name(), "Manually check message details against customers table");
+        } else{
+            Optional<CustomerAccount> downLineAccountOptional = customerAccountRepository.findCustomerAccountByCustomerId(downLineJSON.getLong("customer_id"));
+            if(downLineAccountOptional.isPresent()){
+                CustomerAccount downLineAccount = downLineAccountOptional.get();
+                downLineAccount.setPoints(downLineAccount.getPoints() + Parameters.VALUE_REGISTRATION_POINTS);
+                customerAccountRepository.save(downLineAccount);
+            }else{
+                CustomerAccount downLineAccount = new CustomerAccount();
+                downLineAccount.setPoints(Parameters.VALUE_REGISTRATION_POINTS);
+                downLineAccount.setCustomerId(downCustomerOptional.get().getId());
+                downLineAccount.setTotalBalance(Parameters.VALUE_REGISTRATION_FEES);
+                customerAccountRepository.save(downLineAccount);
+            }
+        }
+
+        //Issue referral bonus if available
+        Optional<Customer> refCustomerOptional = customerRepository.findById(referrerJSON.getLong("customer_id"));
+        if(!refCustomerOptional.isPresent()) {
+            throw new ApiException("No referrer customer", HttpStatus.FAILED_DEPENDENCY, ErrorCodes.CUSTOMER_NOT_FOUND.name(), "Manually check message details against customers table");
+        }
+        boolean hasIssuedDRBonus = issueDirectReferralBonus(refCustomerOptional.get(), messageEntity);
+
+        if(!hasIssuedDRBonus) {
+            throw new ApiException("An error occurred while issues DRB", HttpStatus.FAILED_DEPENDENCY, ErrorCodes.CUSTOMER_NOT_FOUND.name(), "Check application logs");
+        }
+
+        //Backtrack and process customer tree
+        Optional<Customer> upCustomerOptional = customerRepository.findById(upLineJSON.getLong("customer_id"));
+        if(!upCustomerOptional.isPresent()) {
+            throw new ApiException("No up-line customer", HttpStatus.FAILED_DEPENDENCY, ErrorCodes.CUSTOMER_NOT_FOUND.name(), "Manually check message details against customers table");
+        }
+        processCustomerUpLinePath(upCustomerOptional.get(), messageEntity);
+
+        return true;
+    }
+
+    private boolean issueDirectReferralBonus(Customer customer, Messages message){
+
+        if(message.getStatus().equals(Parameters.TRANSACTION_STATUS_INITIATED)){
+            return true;
+        }
+
+        if(customer.getPackageId().getDirectReferralPercentage() == null){
+            message.setStatus(Parameters.TRANSACTION_STATUS_INITIATED);
+            messageRepository.save(message);
+            return true;
+        }
+
+        double directReferralBonusPercentage = customer.getPackageId().getDirectReferralPercentage();
+
+        Optional<Settings> registrationFeesSettings = settingsRepository.findByName(Parameters.SETTINGS_KEY_REGISTRATION_FEE);
+        double registrationFees = Parameters.VALUE_REGISTRATION_FEES;
+        if(registrationFeesSettings.isPresent())
+            registrationFees = Double.valueOf(registrationFeesSettings.get().getValue());
+
+        double amount = (directReferralBonusPercentage/100.0) * registrationFees;
+
+        //Credit customer account with amount
+        Optional<CustomerAccount> customerAccountOptional = customerAccountRepository.findCustomerAccountByCustomerId(customer.getId());
+        CustomerAccount customerAccount;
+        if(customerAccountOptional.isPresent()){
+            customerAccount = customerAccountOptional.get();
+        }else{
+            customerAccount = new CustomerAccount();
+            customerAccount.setCustomerId(customer.getId());
+        }
+        //Customer account
+        try {
+            logger.info("TRANSFERRING {} AS DIRECT REFERRAL BONUS TO CUSTOMER {} - {} {}", amount, customer.getId(), customer.getFirstName(), customer.getLastName());
+            creditCustomerAccount(customerAccount, amount, Parameters.PAYMENT_LOCATION_AUTOMATIC, Parameters.BONUS_TYPE_REGISTRATION);
+            transferBonusPaycashToCustomerAccount(customer, amount);
+            message.setStatus(Parameters.TRANSACTION_STATUS_INITIATED);
+            messageRepository.save(message);
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean processCustomerUpLinePath(Customer customer, Messages messageEntity){
+        //Mark index of where processing ended
+        Optional<ProcessPosition> optionalProcessPosition = processPositionRepository.findProcessPositionByMessageIdId(messageEntity.getId());
+
+        ProcessPosition processPosition = optionalProcessPosition.orElse(new ProcessPosition());
+        processPosition.setCursorIndex(customer.getId());
+        processPosition.setMessageId(messageEntity);
+        processPositionRepository.save(processPosition);
+
+        //Now from current customer, add two points until we get to level 2 since 1 is at the root
+        Optional<CustomerAccount> customerAccountOptional = customerAccountRepository.findCustomerAccountByCustomerId(customer.getId());
+        CustomerAccount customerAccount;
+        if(customerAccountOptional.isPresent()){
+            customerAccount = customerAccountOptional.get();
+        }else{
+            customerAccount = new CustomerAccount();
+            customerAccount.setCustomerId(customer.getId());
+        }
+
+        Integer currentPoints = customerAccountRepository.sumCustomerAccountPoints(customerAccount.getId()).intValue();
+        customerAccount.setPoints(currentPoints + Parameters.VALUE_REGISTRATION_POINTS);
+        customerAccount.setLastUpdate(new Date());
+        customerAccountRepository.save(customerAccount);
+
+        verifyBonusQualification(customerAccount, customer);
+
+        if(customer.getUpLink() != null){
+            processCustomerUpLinePath(customer.getUpLink().getParentId(), messageEntity);
+        }else{
+            //All have been processed
+            messageEntity.setStatus(Parameters.TRANSACTION_STATUS_COMPLETED);
+            messageEntity.setUpdatedAt(new Date());
+            messageRepository.save(messageEntity);
+        }
+
+        return true;
+    }
+
+    private void verifyBonusQualification(CustomerAccount customerAccount, Customer customer) {
+
+        Integer currentPoints = customerAccount.getPoints();
+        if (customer.getPackageId().getNextLevel() == null){
+            return;
+//            throw new ApiException("Customer doesn't have a package or package doesn't have next level", HttpStatus.FAILED_DEPENDENCY, ErrorCodes.CUSTOMER_NOT_FOUND.name(), "Check customer registration");
+        }
+        Integer nextLevelPoints = customer.getPackageId().getNextLevel().getQualificationPoints();
+
+        if (currentPoints >= nextLevelPoints) {
+            //Issue qualification bonus and change customers package
+            customer.setPackageId(customer.getPackageId().getNextLevel());
+            customerRepository.save(customer);
+
+            Optional<Bonus> optionalBonus = bonusRepository.findBonusByTransactionTypeNameAndPackageId(Parameters.TRANSACTION_TYPE_PRODUCT_BONUS, customer.getPackageId().getId());
+            if (!optionalBonus.isPresent())
+                throw new ApiException("Customer doesn't have a package or package doesn't have next level", HttpStatus.FAILED_DEPENDENCY, ErrorCodes.CUSTOMER_NOT_FOUND.name(), "Check customer registration");
+
+            Bonus bonus = optionalBonus.get();
+            logger.info("AWARDING QUALIFICATION BONUS OF {} TO ACCOUNT {} BELONGING TO {} {}", bonus.getAmount(), customerAccount.getId(), customer.getFirstName(), customer.getLastName());
+
+            //Credit customer account with bonus
+            creditCustomerAccount(customerAccount, bonus.getAmount(), Parameters.PAYMENT_LOCATION_AUTOMATIC, Parameters.TRANSACTION_TYPE_PRODUCT_BONUS);
+            transferBonusPaycashToCustomerAccount(customer, bonus.getAmount());
+        }
+
+    }
+
+    @Transactional
+    public void creditCustomerAccount(CustomerAccount customerAccount, Double amount, String paidAt, String type){
+        //Record account movements
+        Transaction transaction = new Transaction();
+        transaction.setAmount(amount);
+        transaction.setCreatedAt(new Date());
+        transaction.setStatus(Parameters.TRANSACTION_STATUS_INITIATED);
+        transaction.setCustomerId(customerAccount.getId());
+        transaction.setPaidAt(paidAt);
+        transaction.setPaymentToken("");
+        String transactionCode = new Date().getTime() + "X" + type.substring(0, 2);
+        transaction.setCode(transactionCode);
+        transactionRepository.save(transaction);
+
+        AccountMovements accountMovements = new AccountMovements();
+        accountMovements.setCustomerAccount(customerAccount);
+        accountMovements.setTransaction(transaction);
+        accountMovements.setMotive(type);
+        accountMovements.setDescription("");
+        accountMovements.setType(Parameters.ACCOUNT_MOVEMENT_CREDIT);
+        accountMovementsRepository.save(accountMovements);
+
+        customerAccount.setTotalBalance(customerAccount.getTotalBalance() + amount);
+        customerAccount.setAvailableBalance(customerAccount.getAvailableBalance() + amount);
+        customerAccountRepository.save(customerAccount);
+
+        //Update transaction status
+        transaction.setStatus(Parameters.TRANSACTION_STATUS_PAID);
+        transactionRepository.save(transaction);
+
+    }
+
+    public void transferBonusPaycashToCustomerAccount(Customer recipientCustomer, Double amount){
+
+        TransferRequestDTO transferRequestDTO = new TransferRequestDTO();
+        transferRequestDTO.setInitiatedBy(Parameters.PAYMENT_LOCATION_AUTOMATIC);
+        transferRequestDTO.setSenderRegCode(paymentProps.getBONUS_REG_CODE());
+        transferRequestDTO.setPassword(paymentProps.getBONUS_PASS());
+        transferRequestDTO.setCurrency("PCH");
+
+        DepositListing dep = new DepositListing(recipientCustomer.getRegistrationCode(), amount);
+        List<DepositListing> depositListings = new ArrayList<>();
+        depositListings.add(dep);
+        transferRequestDTO.setReceivers(depositListings);
+
+        paymentRestClient.transferPayCash(transferRequestDTO);
+
+    }
+
+}
