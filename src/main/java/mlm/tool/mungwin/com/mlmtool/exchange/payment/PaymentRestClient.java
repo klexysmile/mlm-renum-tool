@@ -34,7 +34,7 @@ public class PaymentRestClient {
     }
 
     @Autowired
-    @Qualifier(value = "autoBonusJwtautoBonusJwt")
+    @Qualifier(value = "autoBonusJwt")
     public void setJwtService(JWTService jwtService) {
         this.jwtService = jwtService;
     }
