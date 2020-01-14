@@ -23,10 +23,17 @@ public class MessageProcessorTask {
     //</editor-fold>
 
     @Scheduled(fixedRate = 60000)
-    public void processMessages(){
-        logger.info("BEGINNING PROCESSING MESSAGES AT {}",dateFormat.format(new Date()));
+    public void processRegistrationMessages(){
+        logger.info("BEGINNING PROCESSING REGISTRATION MESSAGES AT {}",dateFormat.format(new Date()));
         bonusCalculationService.processMessages();
-        logger.info("FINISHED PROCESSING MESSAGES AT {}",dateFormat.format(new Date()));
+        logger.info("FINISHED PROCESSING REGISTRATION MESSAGES AT {}",dateFormat.format(new Date()));
+    }
+
+    @Scheduled(fixedRate = 360000)
+    public void processBonusMessages(){
+        logger.info("BEGINNING PROCESSING BONUS MESSAGES AT {}",dateFormat.format(new Date()));
+        bonusCalculationService.processBonusMessages();
+        logger.info("FINISHED PROCESSING BONUS MESSAGES AT {}",dateFormat.format(new Date()));
     }
 
 }

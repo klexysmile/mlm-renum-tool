@@ -11,4 +11,5 @@ public class TransferRequestDTO {
     private String senderRegCode;
     private String password;
     private List<DepositListing> receivers;
+    private String comment;
 }

@@ -9,4 +9,6 @@ public interface MessageRepository extends JpaRepository<Messages, Integer> {
 
     List<Messages> findMessagesByStatus(String status);
 
+    List<Messages> findMessagesByStatusAndType(String status, String type);
+
 }

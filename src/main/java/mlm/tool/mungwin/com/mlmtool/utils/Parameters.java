@@ -17,6 +17,7 @@ public class Parameters {
 
     public static final String BONUS_TYPE_QUALIFICATION = "QUALIFICATION BONUS";
     public static final String BONUS_TYPE_REGISTRATION = "DIRECT REFERRAL BONUS";
+    public static final String BONUS_CONDITION_REGISTER_THREE = "REGISTER_THREE";
 
     public static final String SETTINGS_KEY_REGISTRATION_FEE = "REGISTRATION_FEE";
     public static final String CUSTOMER_LINK_PATH_NODE_DELIMITER = "#";
@@ -24,6 +25,7 @@ public class Parameters {
     public static final Integer CUSTOMER_LINK_PATH_LENGTH = 20;
 
     public static final String MESSAGE_TYPE_REGISTRATION = "REGISTRATION";
+    public static final String MESSAGE_TYPE_BONUS = "BONUS";
 
     public static final Double VALUE_REGISTRATION_FEES = 31350.0;
     public static final Integer VALUE_REGISTRATION_POINTS = 2;

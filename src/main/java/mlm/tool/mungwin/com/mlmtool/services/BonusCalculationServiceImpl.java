@@ -10,6 +10,7 @@ import mlm.tool.mungwin.com.mlmtool.exchange.payment.props.PaymentProps;
 import mlm.tool.mungwin.com.mlmtool.repositories.*;
 import mlm.tool.mungwin.com.mlmtool.services.contract.BonusCalculationService;
 import mlm.tool.mungwin.com.mlmtool.utils.Parameters;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,11 +19,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.lang.reflect.Parameter;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Optional;
+import javax.swing.text.html.Option;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 @Service
 public class BonusCalculationServiceImpl implements BonusCalculationService {
@@ -59,6 +58,9 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
 
     @Autowired
     TransactionRepository transactionRepository;
+
+    @Autowired
+    CustomerLinkRepository customerLinkRepository;
     //</editor-fold>
 
     public void processMessages() {
@@ -100,6 +102,7 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
             if(downLineAccountOptional.isPresent()){
                 CustomerAccount downLineAccount = downLineAccountOptional.get();
                 downLineAccount.setPoints(downLineAccount.getPoints() + Parameters.VALUE_REGISTRATION_POINTS);
+                downLineAccount.setNetworkSize(downLineAccount.getNetworkSize() + 1);
                 customerAccountRepository.save(downLineAccount);
             }else{
                 CustomerAccount downLineAccount = new CustomerAccount();
@@ -237,8 +240,14 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
             logger.info("AWARDING QUALIFICATION BONUS OF {} TO ACCOUNT {} BELONGING TO {} {}", bonus.getAmount(), customerAccount.getId(), customer.getFirstName(), customer.getLastName());
 
             //Credit customer account with bonus
-            creditCustomerAccount(customerAccount, bonus.getAmount(), Parameters.PAYMENT_LOCATION_AUTOMATIC, Parameters.TRANSACTION_TYPE_PRODUCT_BONUS);
-            transferBonusPaycashToCustomerAccount(customer, bonus.getAmount());
+            Integer teamSize = customerLinkRepository.countAllByParentId(customer);
+            if(teamSize > 2){
+                creditCustomerAccount(customerAccount, bonus.getAmount(), Parameters.PAYMENT_LOCATION_AUTOMATIC, Parameters.TRANSACTION_TYPE_PRODUCT_BONUS);
+                transferBonusPaycashToCustomerAccount(customer, bonus.getAmount());
+            }else{
+                //Program for bonus to be paid when appropriate number of referrals have been made
+                registerPendingBonus(customerAccount.getId(), customer.getId(), bonus.getAmount(), Parameters.TRANSACTION_TYPE_PRODUCT_BONUS, Parameters.BONUS_CONDITION_REGISTER_THREE);
+            }
         }
 
     }
@@ -282,6 +291,7 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
         transferRequestDTO.setSenderRegCode(paymentProps.getBONUS_REG_CODE());
         transferRequestDTO.setPassword(paymentProps.getBONUS_PASS());
         transferRequestDTO.setCurrency("PCH");
+        transferRequestDTO.setComment("AUTOMATIC-PAYMENT");
 
         DepositListing dep = new DepositListing(recipientCustomer.getRegistrationCode(), amount);
         List<DepositListing> depositListings = new ArrayList<>();
@@ -292,4 +302,76 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
 
     }
 
+    private void registerPendingBonus(Long accountId, Long customerId, Double amount, String type, String condition){
+        JSONObject pendingBonusJSON = new JSONObject();
+        pendingBonusJSON.put("account_id", accountId);
+        pendingBonusJSON.put("customer_id", customerId);
+        pendingBonusJSON.put("amount", amount);
+        pendingBonusJSON.put("type", type);
+        pendingBonusJSON.put("condition",condition);
+
+        try {
+            Messages message = new Messages();
+            message.setCreatedAt(new Date());
+            message.setStatus(Parameters.TRANSACTION_STATUS_PENDING);
+            message.setMessage(pendingBonusJSON.toString());
+            message.setType(type);
+
+            messageRepository.save(message);
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
+    public void processBonusMessages() {
+        List<Messages> messagesList = messageRepository.findMessagesByStatusAndType(Parameters.TRANSACTION_STATUS_PENDING, Parameters.MESSAGE_TYPE_BONUS);
+
+        logger.info(" ==> PROCESSING -- {} -- MESSAGES <== ", messagesList.size());
+        messagesList.forEach((messages -> {
+            JSONObject messageJSON = new JSONObject(messages.getMessage());
+            switch (messageJSON.getString("condition")) {
+                case Parameters.BONUS_CONDITION_REGISTER_THREE:
+                    processThreeDownLinesBonus(messageJSON, messages);
+                    break;
+                default:
+
+                    break;
+            }
+        }));
+    }
+
+
+    private void processThreeDownLinesBonus(JSONObject messageJSON, Messages messages) {
+        messages.setStatus(Parameters.TRANSACTION_STATUS_INITIATED);
+        messageRepository.save(messages);
+
+        Optional<Customer> customerOptional = customerRepository.findById(messageJSON.getLong("customer_id"));
+        if(!customerOptional.isPresent())
+            return;
+
+        Customer customer = customerOptional.get();
+        Integer teamSize = customerLinkRepository.countAllByParentId(customer);
+        if(teamSize > 2){
+            Optional<CustomerAccount> customerAccountOptional = customerAccountRepository.findById(messageJSON.getLong("account_id"));
+            if(!customerAccountOptional.isPresent())
+                return;
+            CustomerAccount account = customerAccountOptional.get();
+
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                Double amount = messageJSON.getDouble("amount");
+                creditCustomerAccount(account, amount, sdf.format(new Date()), Parameters.TRANSACTION_TYPE_PRODUCT_BONUS);
+                transferBonusPaycashToCustomerAccount(customer, amount);
+
+                messages.setStatus(Parameters.TRANSACTION_STATUS_COMPLETED);
+                messageRepository.save(messages);
+            } catch (JSONException e) {
+                logger.error(e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+    }
 }
