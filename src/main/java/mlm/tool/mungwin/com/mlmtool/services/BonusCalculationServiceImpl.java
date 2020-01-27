@@ -102,7 +102,8 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
             if(downLineAccountOptional.isPresent()){
                 CustomerAccount downLineAccount = downLineAccountOptional.get();
                 downLineAccount.setPoints(downLineAccount.getPoints() + Parameters.VALUE_REGISTRATION_POINTS);
-                downLineAccount.setNetworkSize(downLineAccount.getNetworkSize() + 1);
+                int networkSize = downLineAccount.getNetworkSize() == null ? 0 : downLineAccount.getNetworkSize();
+                downLineAccount.setNetworkSize(networkSize + 1);
                 customerAccountRepository.save(downLineAccount);
             }else{
                 CustomerAccount downLineAccount = new CustomerAccount();
@@ -201,6 +202,7 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
 
         Integer currentPoints = customerAccountRepository.sumCustomerAccountPoints(customerAccount.getId()).intValue();
         customerAccount.setPoints(currentPoints + Parameters.VALUE_REGISTRATION_POINTS);
+        customerAccount.setNetworkSize(customerAccount.getNetworkSize() + 1);
         customerAccount.setLastUpdate(new Date());
         customerAccountRepository.save(customerAccount);
 
