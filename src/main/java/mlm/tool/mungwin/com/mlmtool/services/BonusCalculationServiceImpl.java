@@ -200,9 +200,9 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
             customerAccount.setCustomerId(customer.getId());
         }
 
-        Integer currentPoints = customerAccountRepository.sumCustomerAccountPoints(customerAccount.getId()).intValue();
+        Integer currentPoints = customerAccountRepository.sumCustomerAccountPoints(customerAccount.getId()) != null ? customerAccountRepository.sumCustomerAccountPoints(customerAccount.getId()).intValue() : 0;
         customerAccount.setPoints(currentPoints + Parameters.VALUE_REGISTRATION_POINTS);
-        customerAccount.setNetworkSize(customerAccount.getNetworkSize() + 1);
+        customerAccount.setNetworkSize((customerAccount.getNetworkSize() == null ? 0 : customerAccount.getNetworkSize()) + 1);
         customerAccount.setLastUpdate(new Date());
         customerAccountRepository.save(customerAccount);
 
