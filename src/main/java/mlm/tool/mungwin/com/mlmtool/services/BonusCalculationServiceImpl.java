@@ -354,8 +354,6 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
 
 
     private void processThreeDownLinesBonus(JSONObject messageJSON, Messages messages) {
-        messages.setStatus(Parameters.TRANSACTION_STATUS_INITIATED);
-        messageRepository.save(messages);
 
         Optional<Customer> customerOptional = customerRepository.findById(messageJSON.getLong("customer_id"));
         if(!customerOptional.isPresent())
@@ -364,6 +362,8 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
         Customer customer = customerOptional.get();
         Integer teamSize = customerLinkRepository.countAllByParentId(customer);
         if(teamSize > 2){
+            messages.setStatus(Parameters.TRANSACTION_STATUS_INITIATED);
+            messageRepository.save(messages);
             Optional<CustomerAccount> customerAccountOptional = customerAccountRepository.findById(messageJSON.getLong("account_id"));
             if(!customerAccountOptional.isPresent())
                 return;
