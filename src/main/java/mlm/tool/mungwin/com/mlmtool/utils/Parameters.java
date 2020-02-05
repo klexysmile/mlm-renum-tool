@@ -27,7 +27,7 @@ public class Parameters {
     public static final String MESSAGE_TYPE_REGISTRATION = "REGISTRATION";
     public static final String MESSAGE_TYPE_BONUS = "BONUS";
 
-    public static final Double VALUE_REGISTRATION_FEES = 31350.0;
+    public static final Double VALUE_REGISTRATION_FEES = 194.07;
     public static final Integer VALUE_REGISTRATION_POINTS = 2;
 
     public static final String PAYMENT_LOCATION_AUTOMATIC = "AUTOMATIC";

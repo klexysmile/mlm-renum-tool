@@ -9,7 +9,9 @@ import mlm.tool.mungwin.com.mlmtool.exchange.payment.dto.request.TransferRequest
 import mlm.tool.mungwin.com.mlmtool.exchange.payment.props.PaymentProps;
 import mlm.tool.mungwin.com.mlmtool.repositories.*;
 import mlm.tool.mungwin.com.mlmtool.services.contract.BonusCalculationService;
+import mlm.tool.mungwin.com.mlmtool.tasks.MessageProcessorTask;
 import mlm.tool.mungwin.com.mlmtool.utils.Parameters;
+import org.apache.logging.log4j.LogManager;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -27,7 +29,7 @@ import java.util.*;
 public class BonusCalculationServiceImpl implements BonusCalculationService {
 
     //<editor-fold desc="FIELDS">
-    private Logger logger = LoggerFactory.getLogger(BonusCalculationServiceImpl.class);
+    private static final org.apache.logging.log4j.Logger logger = LogManager.getLogger(BonusCalculationServiceImpl.class);
 
     @Autowired
     PaymentRestClient paymentRestClient;
@@ -109,7 +111,9 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
                 CustomerAccount downLineAccount = new CustomerAccount();
                 downLineAccount.setPoints(Parameters.VALUE_REGISTRATION_POINTS);
                 downLineAccount.setCustomerId(downCustomerOptional.get().getId());
-                downLineAccount.setTotalBalance(Parameters.VALUE_REGISTRATION_FEES);
+                downLineAccount.setTotalBalance(0.0);
+                downLineAccount.setAvailableBalance(0.0);
+                downLineAccount.setNetworkSize(0);
                 customerAccountRepository.save(downLineAccount);
             }
         }
@@ -164,6 +168,10 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
         }else{
             customerAccount = new CustomerAccount();
             customerAccount.setCustomerId(customer.getId());
+            customerAccount.setNetworkSize(0);
+            customerAccount.setPoints(0);
+            customerAccount.setAvailableBalance(0.0);
+            customerAccount.setTotalBalance(0.0);
         }
         //Customer account
         try {
@@ -276,8 +284,8 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
         accountMovements.setType(Parameters.ACCOUNT_MOVEMENT_CREDIT);
         accountMovementsRepository.save(accountMovements);
 
-        customerAccount.setTotalBalance(customerAccount.getTotalBalance() + amount);
-        customerAccount.setAvailableBalance(customerAccount.getAvailableBalance() + amount);
+        customerAccount.setTotalBalance((customerAccount.getTotalBalance() == null ? 0 : customerAccount.getTotalBalance()) + amount);
+        customerAccount.setAvailableBalance((customerAccount.getAvailableBalance() == null ? 0 : customerAccount.getAvailableBalance()) + amount);
         customerAccountRepository.save(customerAccount);
 
         //Update transaction status

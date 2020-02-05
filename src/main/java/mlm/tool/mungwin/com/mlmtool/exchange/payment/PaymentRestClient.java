@@ -2,13 +2,15 @@ package mlm.tool.mungwin.com.mlmtool.exchange.payment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import mlm.tool.mungwin.com.mlmtool.exceptions.ApiException;
-import mlm.tool.mungwin.com.mlmtool.exceptions.ErrorCodes;
 import mlm.tool.mungwin.com.mlmtool.exceptions.SecurityErrorCodes;
 import mlm.tool.mungwin.com.mlmtool.exchange.payment.dto.request.*;
 import mlm.tool.mungwin.com.mlmtool.exchange.payment.dto.response.*;
+import mlm.tool.mungwin.com.mlmtool.exchange.payment.exceptions.GlobalSecurityException;
 import mlm.tool.mungwin.com.mlmtool.exchange.payment.props.PaymentProps;
 import mlm.tool.mungwin.com.mlmtool.services.utilities.autopay.jwtengine.JWTService;
 import org.apache.commons.codec.binary.Base64;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +21,9 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 @Configuration
 public class PaymentRestClient {
@@ -249,7 +253,8 @@ public class PaymentRestClient {
         try {
             restClientErrorMap = new ObjectMapper().readValue(restClientResponseBodyAsString, HashMap.class);
         } catch (Exception ex){
-            throw new ApiException(SecurityErrorCodes.FAILED_TO_DECODE_HTTPCLIENT_EXCEPTION.toString(), HttpStatus.INTERNAL_SERVER_ERROR, ErrorCodes.ERROR.name(), "");
+            throw new GlobalSecurityException("Failed to decode http Error Response", HttpStatus.INTERNAL_SERVER_ERROR,
+                    SecurityErrorCodes.FAILED_TO_DECODE_HTTPCLIENT_EXCEPTION.toString(), "");
         }
         return restClientErrorMap;
     }

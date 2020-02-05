@@ -1,8 +1,8 @@
 package mlm.tool.mungwin.com.mlmtool.tasks;
 
 import mlm.tool.mungwin.com.mlmtool.services.BonusCalculationServiceImpl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -14,7 +14,7 @@ import java.util.Date;
 public class MessageProcessorTask {
 
     //<editor-fold desc="FIELDS">
-    private Logger logger = LoggerFactory.getLogger(MessageProcessorTask.class);
+    private static final Logger logger = LogManager.getLogger(MessageProcessorTask.class);
 
     private static final SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm:ss");
 

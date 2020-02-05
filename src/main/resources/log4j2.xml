@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30">
+    <Properties>
+        <Property name="LOG_PATTERN">
+            %d{yyyy-MM-dd HH:mm:ss.SSS} %5p ${hostName} --- [%15.15t] %-40.40c{1.} : %m%n%ex
+        </Property>
+    </Properties>
+    <appender name="rollingFile" class="org.apache.log4j.rolling.RollingFileAppender">
+        <rollingPolicy
+                class="org.apache.log4j.rolling.TimeBasedRollingPolicy">
+            <param name="ActiveFileName" value="logs/application.log" />
+            <param name="FileNamePattern" value="logs/application.%d{dd-MMM}.log.gz" />
+        </rollingPolicy>
+        <triggeringPolicy
+                class="org.apache.log4j.rolling.SizeBasedTriggeringPolicy">
+            <param name="MaxFileSize" value="10MB" />
+        </triggeringPolicy>
+        <layout class="org.apache.log4j.PatternLayout">
+            <param name="ConversionPattern" value="%d{yyyy-MM-dd HH:mm:ss} %-5p - %m%n" />
+        </layout>
+    </appender>
+    <Loggers>
+        <Logger name="com.mungwincore.mlmtool" level="debug" additivity="false">
+            <AppenderRef ref="ConsoleAppender" />
+        </Logger>
+
+        <Root level="info">
+            <AppenderRef ref="ConsoleAppender" />
+        </Root>
+    </Loggers>
+</Configuration>
