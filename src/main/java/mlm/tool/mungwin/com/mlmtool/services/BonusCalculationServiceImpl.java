@@ -20,8 +20,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import sun.plugin2.message.Message;
 
 import javax.swing.text.html.Option;
+import java.lang.reflect.Parameter;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -69,6 +71,11 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
 
         List<Messages> messagesList = messageRepository.findMessagesByStatus(Parameters.TRANSACTION_STATUS_PENDING);
 
+        List<Messages> initiatedMessages = messageRepository.findMessagesByStatus(Parameters.TRANSACTION_STATUS_INITIATED);
+        if(initiatedMessages.size() > 0){
+            logger.info(" ==> SOME {} MESSAGES FORM LAST OPERATION ARE STILL PENDING. EXITING <== ", initiatedMessages.size());
+            return;
+        }
         logger.info(" ==> PROCESSING -- {} -- MESSAGES <== ", messagesList.size());
         messagesList.forEach((messages -> {
             JSONObject messageJSON = new JSONObject(messages.getMessage());
@@ -337,6 +344,12 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
 
     public void processBonusMessages() {
         List<Messages> messagesList = messageRepository.findMessagesByStatusAndType(Parameters.TRANSACTION_STATUS_PENDING, Parameters.MESSAGE_TYPE_BONUS);
+
+        List<Messages> initiatedMessages = messageRepository.findMessagesByStatusAndType(Parameters.TRANSACTION_STATUS_INITIATED, Parameters.MESSAGE_TYPE_BONUS);
+        if(initiatedMessages.size() > 0){
+            logger.info(" ==> SOME {} MESSAGES FORM LAST OPERATION ARE STILL PENDING. EXITING <== ", initiatedMessages.size());
+            return;
+        }
 
         logger.info(" ==> PROCESSING -- {} -- MESSAGES <== ", messagesList.size());
         messagesList.forEach((messages -> {
