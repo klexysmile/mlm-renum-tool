@@ -13,5 +13,6 @@ public enum ErrorCodes {
     CUSTOMER_NOT_FOUND,
     SUCCESS,
     ERROR,
-    FILE_UPLOAD_ERROR
+    FILE_UPLOAD_ERROR,
+    MISSING_LINK
 }

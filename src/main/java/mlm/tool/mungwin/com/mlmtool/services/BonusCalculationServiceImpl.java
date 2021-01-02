@@ -9,25 +9,21 @@ import mlm.tool.mungwin.com.mlmtool.exchange.payment.dto.request.TransferRequest
 import mlm.tool.mungwin.com.mlmtool.exchange.payment.props.PaymentProps;
 import mlm.tool.mungwin.com.mlmtool.repositories.*;
 import mlm.tool.mungwin.com.mlmtool.services.contract.BonusCalculationService;
-import mlm.tool.mungwin.com.mlmtool.tasks.MessageProcessorTask;
 import mlm.tool.mungwin.com.mlmtool.utils.Parameters;
 import org.apache.logging.log4j.LogManager;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import sun.plugin2.message.Message;
 
-import javax.swing.text.html.Option;
-import java.lang.reflect.Parameter;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
 @Service
+@Qualifier("cron")
 public class BonusCalculationServiceImpl implements BonusCalculationService {
 
     //<editor-fold desc="FIELDS">
@@ -67,7 +63,7 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
     CustomerLinkRepository customerLinkRepository;
     //</editor-fold>
 
-    public void processMessages() {
+    /*public void processMessages() {
 
         List<Messages> messagesList = messageRepository.findMessagesByStatus(Parameters.TRANSACTION_STATUS_PENDING);
 
@@ -117,7 +113,7 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
             }else{
                 CustomerAccount downLineAccount = new CustomerAccount();
                 downLineAccount.setPoints(Parameters.VALUE_REGISTRATION_POINTS);
-                downLineAccount.setCustomerId(downCustomerOptional.get().getId());
+                downLineAccount.setCustomerId(downCustomerOptional.get().getCustomerId());
                 downLineAccount.setTotalBalance(0.0);
                 downLineAccount.setAvailableBalance(0.0);
                 downLineAccount.setNetworkSize(0);
@@ -168,13 +164,13 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
         double amount = (directReferralBonusPercentage/100.0) * registrationFees;
 
         //Credit customer account with amount
-        Optional<CustomerAccount> customerAccountOptional = customerAccountRepository.findCustomerAccountByCustomerId(customer.getId());
+        Optional<CustomerAccount> customerAccountOptional = customerAccountRepository.findCustomerAccountByCustomerId(customer.getCustomerId());
         CustomerAccount customerAccount;
         if(customerAccountOptional.isPresent()){
             customerAccount = customerAccountOptional.get();
         }else{
             customerAccount = new CustomerAccount();
-            customerAccount.setCustomerId(customer.getId());
+            customerAccount.setCustomerId(customer.getCustomerId());
             customerAccount.setNetworkSize(0);
             customerAccount.setPoints(0);
             customerAccount.setAvailableBalance(0.0);
@@ -182,7 +178,7 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
         }
         //Customer account
         try {
-            logger.info("TRANSFERRING {} AS DIRECT REFERRAL BONUS TO CUSTOMER {} - {} {}", amount, customer.getId(), customer.getFirstName(), customer.getLastName());
+            logger.info("TRANSFERRING {} AS DIRECT REFERRAL BONUS TO CUSTOMER {} - {} {}", amount, customer.getCustomerId(), customer.getFirstName(), customer.getLastName());
             creditCustomerAccount(customerAccount, amount, Parameters.PAYMENT_LOCATION_AUTOMATIC, Parameters.BONUS_TYPE_REGISTRATION);
             transferBonusPaycashToCustomerAccount(customer, amount);
             message.setStatus(Parameters.TRANSACTION_STATUS_INITIATED);
@@ -198,24 +194,24 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
 
     private boolean processCustomerUpLinePath(Customer customer, Messages messageEntity){
         //Mark index of where processing ended
-        Optional<ProcessPosition> optionalProcessPosition = processPositionRepository.findProcessPositionByMessageIdId(messageEntity.getId());
+        Optional<ProcessPosition> optionalProcessPosition = processPositionRepository.findProcessPositionByMessageIdId(messageEntity.getCustomerId());
 
         ProcessPosition processPosition = optionalProcessPosition.orElse(new ProcessPosition());
-        processPosition.setCursorIndex(customer.getId());
+        processPosition.setCursorIndex(customer.getCustomerId());
         processPosition.setMessageId(messageEntity);
         processPositionRepository.save(processPosition);
 
         //Now from current customer, add two points until we get to level 2 since 1 is at the root
-        Optional<CustomerAccount> customerAccountOptional = customerAccountRepository.findCustomerAccountByCustomerId(customer.getId());
+        Optional<CustomerAccount> customerAccountOptional = customerAccountRepository.findCustomerAccountByCustomerId(customer.getCustomerId());
         CustomerAccount customerAccount;
         if(customerAccountOptional.isPresent()){
             customerAccount = customerAccountOptional.get();
         }else{
             customerAccount = new CustomerAccount();
-            customerAccount.setCustomerId(customer.getId());
+            customerAccount.setCustomerId(customer.getCustomerId());
         }
 
-        Integer currentPoints = customerAccountRepository.sumCustomerAccountPoints(customerAccount.getId()) != null ? customerAccountRepository.sumCustomerAccountPoints(customerAccount.getId()).intValue() : 0;
+        Integer currentPoints = customerAccountRepository.sumCustomerAccountPoints(customerAccount.getCustomerId()) != null ? customerAccountRepository.sumCustomerAccountPoints(customerAccount.getCustomerId()).intValue() : 0;
         customerAccount.setPoints(currentPoints + Parameters.VALUE_REGISTRATION_POINTS);
         customerAccount.setNetworkSize((customerAccount.getNetworkSize() == null ? 0 : customerAccount.getNetworkSize()) + 1);
         customerAccount.setLastUpdate(new Date());
@@ -249,12 +245,12 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
             customer.setPackageId(customer.getPackageId().getNextLevel());
             customerRepository.save(customer);
 
-            Optional<Bonus> optionalBonus = bonusRepository.findBonusByTransactionTypeNameAndPackageId(Parameters.TRANSACTION_TYPE_PRODUCT_BONUS, customer.getPackageId().getId());
+            Optional<Bonus> optionalBonus = bonusRepository.findBonusByTransactionTypeNameAndPackageId(Parameters.TRANSACTION_TYPE_PRODUCT_BONUS, customer.getPackageId().getCustomerId());
             if (!optionalBonus.isPresent())
                 throw new ApiException("Customer doesn't have a package or package doesn't have next level", HttpStatus.FAILED_DEPENDENCY, ErrorCodes.CUSTOMER_NOT_FOUND.name(), "Check customer registration");
 
             Bonus bonus = optionalBonus.get();
-            logger.info("AWARDING QUALIFICATION BONUS OF {} TO ACCOUNT {} BELONGING TO {} {}", bonus.getAmount(), customerAccount.getId(), customer.getFirstName(), customer.getLastName());
+            logger.info("AWARDING QUALIFICATION BONUS OF {} TO ACCOUNT {} BELONGING TO {} {}", bonus.getAmount(), customerAccount.getCustomerId(), customer.getFirstName(), customer.getLastName());
 
             //Credit customer account with bonus
             Integer teamSize = customerLinkRepository.countAllByParentId(customer);
@@ -263,7 +259,7 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
                 transferBonusPaycashToCustomerAccount(customer, bonus.getAmount());
             }else{
                 //Program for bonus to be paid when appropriate number of referrals have been made
-                registerPendingBonus(customerAccount.getId(), customer.getId(), bonus.getAmount(), Parameters.TRANSACTION_TYPE_PRODUCT_BONUS, Parameters.BONUS_CONDITION_REGISTER_THREE);
+                registerPendingBonus(customerAccount.getCustomerId(), customer.getCustomerId(), bonus.getAmount(), Parameters.TRANSACTION_TYPE_PRODUCT_BONUS, Parameters.BONUS_CONDITION_REGISTER_THREE);
             }
         }
 
@@ -276,7 +272,7 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
         transaction.setAmount(amount);
         transaction.setCreatedAt(new Date());
         transaction.setStatus(Parameters.TRANSACTION_STATUS_INITIATED);
-        transaction.setCustomerId(customerAccount.getId());
+        transaction.setCustomerId(customerAccount.getCustomerId());
         transaction.setPaidAt(paidAt);
         transaction.setPaymentToken("");
         String transactionCode = new Date().getTime() + "X" + type.substring(0, 2);
@@ -396,5 +392,5 @@ public class BonusCalculationServiceImpl implements BonusCalculationService {
             }
         }
 
-    }
+    }*/
 }

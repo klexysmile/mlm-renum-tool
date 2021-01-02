@@ -1,5 +1,6 @@
 package mlm.tool.mungwin.com.mlmtool.utils;
 
+import java.text.SimpleDateFormat;
 import java.util.zip.DeflaterOutputStream;
 
 public class Parameters {
@@ -35,5 +36,12 @@ public class Parameters {
     public static final String ACCOUNT_MOVEMENT_CREDIT = "CREDIT";
 
     public static final String CURRENCY_PAYCASH = "PCH";
+
+    public static final String DLC_EXCHANGE = "dlc";
+    public static final String DLC_MEMBER_REGISTRATION_QUEUE = "dlc-member-registration";
+    public static final String DLC_MEMBER_REGISTRATION_EXCHANGE_KEY = "dlc-member-registration";
+    public static final String DLC_MEMBER_REGISTRATION_RESPONSE_EXCHANGE_KEY = "dlc-member-registration-response";
+
+    public static final SimpleDateFormat sdfMysql = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
 }

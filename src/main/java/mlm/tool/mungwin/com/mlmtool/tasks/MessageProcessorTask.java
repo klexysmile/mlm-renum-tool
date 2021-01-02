@@ -1,6 +1,7 @@
 package mlm.tool.mungwin.com.mlmtool.tasks;
 
 import mlm.tool.mungwin.com.mlmtool.services.BonusCalculationServiceImpl;
+import mlm.tool.mungwin.com.mlmtool.services.contract.BonusCalculationService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,17 +23,18 @@ public class MessageProcessorTask {
     BonusCalculationServiceImpl bonusCalculationService;
     //</editor-fold>
 
-    @Scheduled(fixedRate = 60000)
+
+//    @Scheduled(fixedRate = 60000)
     public void processRegistrationMessages(){
         logger.info("BEGINNING PROCESSING REGISTRATION MESSAGES AT {}",dateFormat.format(new Date()));
-        bonusCalculationService.processMessages();
+//        bonusCalculationService.processMessages();
         logger.info("FINISHED PROCESSING REGISTRATION MESSAGES AT {}",dateFormat.format(new Date()));
     }
 
-    @Scheduled(fixedRate = 360000)
+//    @Scheduled(fixedRate = 360000)
     public void processBonusMessages(){
         logger.info("BEGINNING PROCESSING BONUS MESSAGES AT {}",dateFormat.format(new Date()));
-        bonusCalculationService.processBonusMessages();
+//        bonusCalculationService.processBonusMessages();
         logger.info("FINISHED PROCESSING BONUS MESSAGES AT {}",dateFormat.format(new Date()));
     }
 

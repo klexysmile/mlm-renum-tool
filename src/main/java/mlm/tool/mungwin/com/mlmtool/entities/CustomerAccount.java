@@ -62,7 +62,7 @@ public class CustomerAccount implements Serializable {
     @Column(name = "points")
     private Integer points;
     @Column(name = "network_size")
-    private Integer networkSize;
+    private int networkSize;
     @Column(name = "last_update")
     @Temporal(TemporalType.TIMESTAMP)
     private Date lastUpdate;
