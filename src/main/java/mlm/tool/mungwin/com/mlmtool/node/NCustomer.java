@@ -1,14 +1,8 @@
 package mlm.tool.mungwin.com.mlmtool.node;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import mlm.tool.mungwin.com.mlmtool.bean.CustomerAccountBean;
 import mlm.tool.mungwin.com.mlmtool.entities.relationships.Referral;
 import org.neo4j.ogm.annotation.*;
 
-import java.util.Date;
 import java.util.Set;
 
 @NodeEntity
